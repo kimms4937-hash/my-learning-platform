@@ -4,4 +4,5 @@ numpy
 google-generativeai 
 fpdf2 
 PyPDF2 
-python-dotenv
+python-dotenv 
+python-pptx
