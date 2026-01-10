@@ -9,9 +9,9 @@ import time
 import requests
 
 # --------------------------------------------------------------------------
-# 1. 기본 설정 및 한글 폰트 준비
+# 1. 기본 설정
 # --------------------------------------------------------------------------
-st.set_page_config(layout="wide", page_title="나만의 AI 학습 플랫폼 (Final)")
+st.set_page_config(layout="wide", page_title="나만의 AI 학습 플랫폼")
 
 # API 키 설정
 try:
@@ -23,7 +23,7 @@ try:
 except Exception as e:
     st.error(f"API 키 설정 중 오류 발생: {e}")
 
-# 한글 폰트 다운로드 (PDF 깨짐 방지용)
+# 한글 폰트 (PDF 깨짐 방지)
 @st.cache_resource
 def get_korean_font():
     font_path = "NanumGothic.ttf"
@@ -41,7 +41,6 @@ FONT_PATH = get_korean_font()
 # --------------------------------------------------------------------------
 
 def get_pdf_text(pdf_file):
-    """PDF에서 텍스트 추출"""
     text = ""
     try:
         pdf_reader = PdfReader(pdf_file)
@@ -52,7 +51,6 @@ def get_pdf_text(pdf_file):
     return text
 
 def get_pptx_text(pptx_file):
-    """PPT 파일에서 텍스트 추출"""
     text = ""
     try:
         prs = Presentation(pptx_file)
@@ -65,7 +63,6 @@ def get_pptx_text(pptx_file):
     return text
 
 def upload_to_gemini(file_obj, mime_type):
-    """동영상/음성 파일을 Gemini 서버로 업로드"""
     suffix = f".{mime_type.split('/')[-1]}"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(file_obj.getvalue())
@@ -73,7 +70,6 @@ def upload_to_gemini(file_obj, mime_type):
     
     uploaded_file = genai.upload_file(tmp_path, mime_type=mime_type)
     
-    # 처리 대기
     while uploaded_file.state.name == "PROCESSING":
         time.sleep(2)
         uploaded_file = genai.get_file(uploaded_file.name)
@@ -81,11 +77,8 @@ def upload_to_gemini(file_obj, mime_type):
     return uploaded_file
 
 def create_pdf(original_summary, ai_explanation):
-    """결과 PDF 생성 (한글 지원)"""
     pdf = FPDF()
     pdf.add_page()
-    
-    # 한글 폰트 추가
     pdf.add_font('Nanum', '', FONT_PATH, uni=True)
     pdf.set_font('Nanum', size=12)
     
@@ -108,13 +101,12 @@ def create_pdf(original_summary, ai_explanation):
 # 3. 메인 화면 로직
 # --------------------------------------------------------------------------
 
-st.title("⚡️ Ultimate AI Learning Hub (Final)")
-st.caption("지원 포맷: PDF, PPT, 동영상(MP4), 음성(MP3) | 모델: Gemini 1.5 Flash")
+st.title("⚡️ Ultimate AI Learning Hub")
+st.caption("지원: PDF, PPT, 동영상, 음성 | 모델: Gemini 1.5 Flash")
 st.markdown("---")
 
 col1, col2 = st.columns([1, 1])
 
-# [왼쪽] 업로드 구역
 with col1:
     st.subheader("📂 자료 업로드")
     main_file = st.file_uploader("1. 메인 수업 자료 (PDF 필수)", type=['pdf'], key="main")
@@ -142,7 +134,6 @@ with col1:
             supp_type = "media"
             st.info(f"🎞️ {ext} 미디어 파일 준비됨")
 
-# [오른쪽] AI 분석 구역
 with col2:
     st.subheader("🤖 AI 튜터")
     user_question = st.text_area("질문을 입력하세요", height=100)
@@ -155,8 +146,9 @@ with col2:
                 try:
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     
-                    # [수정 완료] 대괄호를 포함하여 리스트 초기화
-                    prompt_parts =
+                    # ▼▼▼▼▼▼▼ 여기가 수정된 부분입니다 ▼▼▼▼▼▼▼
+                    prompt_parts = 
+                    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
                     
                     prompt_parts.append("당신은 친절한 AI 튜터입니다. 다음 자료를 보고 질문에 답하세요.")
                     
