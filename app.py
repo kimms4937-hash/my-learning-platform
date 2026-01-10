@@ -126,4 +126,116 @@ def create_pdf(original_summary: str, ai_explanation: str) -> str:
 # -----------------------
 # UI (메인)
 # -----------------------
-st.title("⚡️ Ultimate A
+st.title("⚡️ Ultimate AI Learning Hub")
+st.caption("지원: PDF, PPT, 동영상, 음성 | 모델: Gemini 1.5 Flash")
+st.markdown("---")
+
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.subheader("📂 자료 업로드")
+    main_file = st.file_uploader("1. 메인 수업 자료 (PDF 권장)", type=['pdf'], key="main")
+    supp_file = st.file_uploader("2. 보충 자료 (PPT/영상/음성)", type=['pdf', 'pptx', 'mp4', 'mp3', 'wav'], key="supp")
+
+    main_text = ""
+    supp_content = None
+    supp_type = "none"
+
+    if main_file:
+        main_text = get_pdf_text(main_file)
+        st.success("✅ 메인 자료 확인됨")
+
+    if supp_file:
+        ext = supp_file.name.split('.')[-1].lower()
+        if ext == 'pdf':
+            supp_content = get_pdf_text(supp_file)
+            supp_type = "text"
+            st.success("✅ 보충 PDF 확인됨")
+        elif ext in ['pptx', 'ppt']:
+            supp_content = get_pptx_text(supp_file)
+            supp_type = "text"
+            st.success("✅ 보충 PPT 확인됨")
+        elif ext in ['mp4', 'mp3', 'wav']:
+            supp_type = "media"
+            st.info(f"🎞️ {ext} 미디어 파일 준비됨")
+
+with col2:
+    st.subheader("🤖 AI 튜터")
+    user_question = st.text_area("질문을 입력하세요", height=120)
+
+    if st.button("🚀 설명 요청하기", type="primary"):
+        if not main_file and not user_question:
+            st.warning("메인 자료와 질문을 입력해주세요.")
+        else:
+            with st.spinner("⚡️ AI가 분석 중입니다..."):
+                try:
+                    # 모델 초기화 (환경에 따라 SDK 사용법이 다를 수 있음)
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+
+                    # << 필수 수정 >> prompt_parts를 리스트로 초기화
+                    prompt_parts = []
+                    prompt_parts.append("당신은 친절한 AI 튜터입니다. 다음 자료를 보고 질문에 답하세요.")
+
+                    if main_text:
+                        prompt_parts.append(f"Answer based on this main text:\n{main_text[:30000]}")
+
+                    if supp_file:
+                        st.write("📂 보충 자료 읽는 중...")
+                        if supp_type == "text":
+                            prompt_parts.append(f"Also consider this text:\n{supp_content[:20000]}")
+                        elif supp_type == "media":
+                            # 미디어 업로드: mime 타입 처리
+                            if supp_file.name.lower().endswith("mp4"):
+                                mime = "video/mp4"
+                            elif supp_file.name.lower().endswith("mp3"):
+                                mime = "audio/mpeg"
+                            else:
+                                mime = "audio/wav"
+                            uploaded_meta = upload_to_gemini(supp_file, mime)
+                            # 모델에 파일 참조를 넣어주는 방식은 SDK 버전에 따라 다름.
+                            prompt_parts.append(f"[Uploaded media file: {getattr(uploaded_meta, 'name', 'unknown')}]")
+                            prompt_parts.append("Analyze the media file above.")
+
+                    prompt_parts.append(f"Question: {user_question}")
+
+                    # 리스트를 하나의 문자열로 결합
+                    prompt = "\n\n".join(prompt_parts)
+
+                    st.write("✍️ 답변 작성 중...")
+                    response_container = st.empty()
+                    full_response = ""
+
+                    # 스트리밍(지원 시) 처리
+                    try:
+                        stream_iter = model.generate_content(prompt, stream=True)
+                        for chunk in stream_iter:
+                            text = getattr(chunk, "text", None) or getattr(chunk, "delta", None)
+                            if text:
+                                full_response += text
+                                response_container.markdown(full_response)
+                    except TypeError:
+                        # SDK가 stream 인자를 지원하지 않을 경우(버전 차이) 대비
+                        resp = model.generate_content(prompt)
+                        # resp의 구조는 SDK 버전에 따라 다르므로 안전하게 속성 검사
+                        text = getattr(resp, "text", None) or str(resp)
+                        full_response = text
+                        response_container.markdown(full_response)
+
+                    # 세션에 저장
+                    st.session_state.ai_response = full_response
+
+                except Exception as e:
+                    st.error(f"에러 발생: {e}")
+
+    # 이전 응답 보여주기 / PDF 저장
+    if "ai_response" in st.session_state and st.session_state.ai_response:
+        st.markdown("---")
+        st.write(st.session_state.ai_response)
+        if st.button("📄 PDF로 결과 저장"):
+            pdf_path = create_pdf(main_text if main_text else "내용 없음", st.session_state.ai_response)
+            with open(pdf_path, "rb") as f:
+                st.download_button("다운로드", f, file_name="study_note.pdf")
+            try:
+                os.remove(pdf_path)
+            except:
+                pass
