@@ -1,54 +1,74 @@
 import streamlit as st
 import google.generativeai as genai
 from PyPDF2 import PdfReader
+from pptx import Presentation
 from fpdf import FPDF
 import tempfile
 import os
 import time
 
 # --------------------------------------------------------------------------
-# 1. 기본 설정 및 Gemini 1.5 Pro (고성능 모델) 설정
+# 1. 기본 설정 (속도 중심: Gemini 1.5 Flash)
 # --------------------------------------------------------------------------
-st.set_page_config(layout="wide", page_title="나만의 AI 학습 플랫폼 (Pro)")
+st.set_page_config(layout="wide", page_title="나만의 AI 학습 플랫폼 (Multi-Format)")
 
 try:
-    # 3단계에서 입력한 API Key를 자동으로 가져옵니다.
     GENAI_API_KEY = st.secrets
     genai.configure(api_key=GENAI_API_KEY)
 except Exception:
-    st.error("🚨 API 키 오류: Streamlit Secrets에 'GENAI_API_KEY'가 설정되지 않았습니다.")
-    st.info("Manage App -> Settings -> Secrets 메뉴에서 키를 입력해주세요.")
+    st.error("API 키 설정 오류: Streamlit Secrets를 확인해주세요.")
 
 # --------------------------------------------------------------------------
-# 2. 헬퍼 함수
+# 2. 자료 처리 함수들 (PDF, PPT, Media)
 # --------------------------------------------------------------------------
 
 def get_pdf_text(pdf_file):
-    """PDF 파일에서 텍스트를 추출하는 함수"""
+    """PDF에서 텍스트 추출"""
     text = ""
-    try:
-        pdf_reader = PdfReader(pdf_file)
-        for page in pdf_reader.pages:
-            text += page.extract_text() or ""
-    except Exception as e:
-        st.error(f"PDF 읽기 오류: {e}")
+    pdf_reader = PdfReader(pdf_file)
+    for page in pdf_reader.pages:
+        text += page.extract_text() or ""
     return text
 
-def create_pdf(original_text, ai_explanation):
-    """결과물을 PDF로 저장하는 함수"""
+def get_pptx_text(pptx_file):
+    """PPT 파일에서 텍스트 추출"""
+    text = ""
+    prs = Presentation(pptx_file)
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if hasattr(shape, "text"):
+                text += shape.text + "\n"
+    return text
+
+def upload_to_gemini(file_obj, mime_type):
+    """동영상/음성 파일을 Gemini 서버로 업로드"""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{mime_type.split('/')[-1]}") as tmp:
+        tmp.write(file_obj.getvalue())
+        tmp_path = tmp.name
+    
+    # Gemini 서버로 업로드
+    uploaded_file = genai.upload_file(tmp_path, mime_type=mime_type)
+    
+    # 처리가 완료될 때까지 대기 (Active 상태 확인)
+    while uploaded_file.state.name == "PROCESSING":
+        time.sleep(2)
+        uploaded_file = genai.get_file(uploaded_file.name)
+        
+    return uploaded_file
+
+def create_pdf(original_summary, ai_explanation):
+    """결과 PDF 생성"""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
     
-    pdf.cell(200, 10, txt="Learning Report (Gemini 1.5 Pro)", ln=True, align='C')
+    pdf.cell(200, 10, txt="Learning Report (Gemini 1.5 Flash)", ln=True, align='C')
     pdf.ln(10)
     
     pdf.set_font("Arial", size=10, style='B')
-    pdf.cell(200, 10, txt="Summary of Materials:", ln=True)
+    pdf.cell(200, 10, txt="Input Summary:", ln=True)
     pdf.set_font("Arial", size=10)
-    # 한글 깨짐 방지를 위해 임시로 영어/숫자만 포함된 요약본 앞부분 사용 권장
-    # (실제 한글 폰트 적용은 별도 폰트 파일 업로드 필요)
-    pdf.multi_cell(0, 10, txt=original_text[:1000] + "...") 
+    pdf.multi_cell(0, 10, txt=original_summary[:1000] + "...") 
     pdf.ln(5)
     
     pdf.set_font("Arial", size=10, style='B')
@@ -61,99 +81,121 @@ def create_pdf(original_text, ai_explanation):
         return tmp_file.name
 
 # --------------------------------------------------------------------------
-# 3. 메인 화면 구성
+# 3. 메인 UI 및 로직
 # --------------------------------------------------------------------------
 
-st.title("🧠 Pro AI Learning Hub (Gemini 1.5 Pro)")
-st.caption("🚀 더 정확하고 똑똑한 Gemini 1.5 Pro 모델을 사용합니다. (속도는 조금 느릴 수 있습니다)")
+st.title("⚡️ Ultimate AI Learning Hub")
+st.caption("지원 포맷: PDF, PPT, 동영상(MP4), 음성(MP3) | 모델: Gemini 1.5 Flash")
 st.markdown("---")
 
 col1, col2 = st.columns([1, 1])
 
-# [왼쪽] 자료 업로드 구역
+# [왼쪽] 업로드 구역
 with col1:
-    st.subheader("📂 학습 자료 업로드")
+    st.subheader("📂 자료 업로드")
     
-    st.markdown("**1. 메인 수업 자료 (필수)**")
-    main_file = st.file_uploader("수업 PDF (필수)", type=['pdf'], key="main")
+    # 1. 메인 자료
+    st.markdown("**1. 메인 수업 자료 (필수 - PDF)**")
+    main_file = st.file_uploader("수업 자료", type=['pdf'], key="main")
     
-    st.markdown("**2. 보충 자료 (선택)**")
-    supp_file = st.file_uploader("보충 PDF (선택)", type=['pdf'], key="supp")
+    # 2. 보충 자료 (확장됨!)
+    st.markdown("**2. 보충 자료 (선택 - 다양한 포맷)**")
+    supp_file = st.file_uploader(
+        "참고용 PDF, PPT, 동영상, 음성 파일", 
+        type=['pdf', 'pptx', 'mp4', 'mp3', 'wav'], 
+        key="supp"
+    )
 
-    # 텍스트 추출 변수 초기화
+    # 자료 처리
     main_text = ""
-    supp_text = ""
+    supp_content = None # 텍스트일 수도 있고, Gemini 파일 객체일 수도 있음
+    supp_type = "none"
 
     if main_file:
         main_text = get_pdf_text(main_file)
-        st.success(f"✅ 메인 자료 로드 완료 ({len(main_text)}자)")
+        st.success(f"✅ 메인 자료 로드 완료")
 
     if supp_file:
-        supp_text = get_pdf_text(supp_file)
-        st.success(f"✅ 보충 자료 로드 완료 ({len(supp_text)}자)")
+        file_type = supp_file.name.split('.')[-1].lower()
+        
+        if file_type == 'pdf':
+            supp_content = get_pdf_text(supp_file)
+            supp_type = "text"
+            st.success("✅ 보충 PDF 로드 완료")
+            
+        elif file_type in ['pptx', 'ppt']:
+            supp_content = get_pptx_text(supp_file)
+            supp_type = "text"
+            st.success("✅ 보충 PPT 텍스트 추출 완료")
+            
+        elif file_type in ['mp4', 'mp3', 'wav']:
+            # 미디어 파일은 업로드 버튼 누른 후에 처리 (비용/시간 절약)
+            supp_type = "media"
+            st.info(f"🎞️ {file_type} 파일이 감지되었습니다. '설명 요청' 시 분석됩니다.")
 
 # [오른쪽] AI 분석 구역
 with col2:
-    st.subheader("🤖 AI 튜터")
+    st.subheader("🤖 AI 튜터 (Fast)")
     
-    user_question = st.text_area("질문 또는 요청사항 (예: 이 내용을 요약해줘)", height=100)
+    user_question = st.text_area("질문 입력 (예: 이 내용을 요약해줘)", height=100)
     
-    # 버튼 클릭 로직
-    if st.button("🚀 설명 요청하기 (High Quality)", type="primary"):
-        # 1. 필수 조건 확인
+    if st.button("🚀 설명 요청하기", type="primary"):
         if not main_file and not user_question:
-            st.warning("⚠️ 메인 자료를 업로드하거나 질문을 입력해주세요.")
-        elif not st.secrets.get("GENAI_API_KEY"):
-            st.error("⚠️ API 키가 설정되지 않았습니다.")
+            st.warning("메인 자료를 올리거나 질문을 입력해주세요.")
         else:
-            # 2. 상태 표시 (Spinner 사용으로 '멈춤' 현상 방지)
-            with st.status("🔍 AI가 자료를 분석하고 있습니다...", expanded=True) as status:
+            with st.status("⚡️ AI가 자료를 분석 중입니다...", expanded=True) as status:
                 try:
-                    st.write("1. 자료 읽는 중...")
-                    full_prompt = f"""
-                    당신은 전문적인 개인 튜터입니다. 아래 자료를 깊이 있게 분석하여 사용자의 질문에 정확하게 답하세요.
+                    # 모델 준비
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    prompt_parts =
                     
-                    [메인 자료]:
-                    {main_text[:20000]} 
+                    # 1. 프롬프트 기본 설정
+                    system_prompt = "당신은 빠르고 정확한 AI 튜터입니다. 제공된 자료를 바탕으로 사용자의 질문에 답하세요."
+                    prompt_parts.append(system_prompt)
                     
-                    [보충 자료]:
-                    {supp_text[:20000] if supp_text else "(없음)"}
+                    # 2. 메인 자료 추가
+                    if main_text:
+                        prompt_parts.append(f":\n{main_text[:20000]}")
                     
-                    [사용자 질문]:
-                    {user_question}
+                    # 3. 보충 자료 추가
+                    if supp_file:
+                        st.write("📂 보충 자료 처리 중...")
+                        if supp_type == "text":
+                            prompt_parts.append(f"[보충 참고 자료 텍스트]:\n{supp_content[:20000]}")
+                        elif supp_type == "media":
+                            # 미디어 업로드 처리
+                            mime = "video/mp4" if "mp4" in supp_file.type else "audio/mp3"
+                            media_file = upload_to_gemini(supp_file, mime)
+                            prompt_parts.append(media_file) # 파일 객체 직접 추가
+                            prompt_parts.append("[위 미디어 파일(영상/음성)을 참고하여 답변하세요]")
                     
-                    핵심을 찌르는 명확하고 교육적인 설명을 제공하세요.
-                    """
+                    # 4. 사용자 질문 추가
+                    prompt_parts.append(f"[사용자 질문]: {user_question}")
                     
-                    st.write("2. Gemini 1.5 Pro 모델 연결 중...")
-                    # 모델 변경: gemini-pro -> gemini-1.5-pro (더 똑똑함)
-                    model = genai.GenerativeModel('gemini-1.5-pro')
-                    
-                    st.write("3. 답변 생성 중... (잠시만 기다려주세요)")
-                    # 스트리밍 응답 시작
+                    # 5. 답변 생성
+                    st.write("✍️ 답변 생성 중...")
                     response_container = st.empty()
                     full_response = ""
                     
-                    response = model.generate_content(full_prompt, stream=True)
-                    
+                    # 스트리밍 출력
+                    response = model.generate_content(prompt_parts, stream=True)
                     for chunk in response:
                         if chunk.text:
                             full_response += chunk.text
                             response_container.markdown(full_response)
-                    
-                    # 결과 저장 (PDF 생성을 위해)
+                            
                     st.session_state.ai_response = full_response
-                    status.update(label="✅ 분석 완료!", state="complete", expanded=False)
+                    status.update(label="✅ 완료!", state="complete", expanded=False)
                     
                 except Exception as e:
-                    st.error(f"❌ 에러 발생: {e}")
-                    status.update(label="❌ 처리 실패", state="error")
+                    st.error(f"에러 발생: {e}")
+                    status.update(label="❌ 실패", state="error")
 
-    # PDF 다운로드 버튼 (결과가 있을 때만 표시)
+    # PDF 다운로드
     if "ai_response" in st.session_state and st.session_state.ai_response:
         st.markdown("---")
         if st.button("📄 결과물 PDF로 저장"):
-            pdf_path = create_pdf(main_text if main_text else "Question Only", st.session_state.ai_response)
+            pdf_path = create_pdf(main_text if main_text else "Media/PPT Content", st.session_state.ai_response)
             with open(pdf_path, "rb") as f:
-                st.download_button("다운로드 시작", f, file_name="study_note_pro.pdf")
+                st.download_button("다운로드 시작", f, file_name="study_note_fast.pdf")
             os.remove(pdf_path)
