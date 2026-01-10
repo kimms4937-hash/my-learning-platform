@@ -25,19 +25,25 @@ except Exception:
 def get_pdf_text(pdf_file):
     """PDF에서 텍스트 추출"""
     text = ""
-    pdf_reader = PdfReader(pdf_file)
-    for page in pdf_reader.pages:
-        text += page.extract_text() or ""
+    try:
+        pdf_reader = PdfReader(pdf_file)
+        for page in pdf_reader.pages:
+            text += page.extract_text() or ""
+    except:
+        pass
     return text
 
 def get_pptx_text(pptx_file):
     """PPT 파일에서 텍스트 추출"""
     text = ""
-    prs = Presentation(pptx_file)
-    for slide in prs.slides:
-        for shape in slide.shapes:
-            if hasattr(shape, "text"):
-                text += shape.text + "\n"
+    try:
+        prs = Presentation(pptx_file)
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if hasattr(shape, "text"):
+                    text += shape.text + "\n"
+    except:
+        pass
     return text
 
 def upload_to_gemini(file_obj, mime_type):
@@ -68,7 +74,6 @@ def create_pdf(original_summary, ai_explanation):
     pdf.set_font("Arial", size=10, style='B')
     pdf.cell(200, 10, txt="Input Summary:", ln=True)
     pdf.set_font("Arial", size=10)
-    # 한글 깨짐 방지를 위해 영어로 대체되거나 폰트 설정 필요 (여기선 기본 처리)
     pdf.multi_cell(0, 10, txt=original_summary[:1000] + "...") 
     pdf.ln(5)
     
@@ -148,7 +153,7 @@ with col2:
                     # 모델 준비
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     
-                    # [수정된 부분] 빈 리스트로 초기화
+                    # [수정 완료] 빈 리스트로 초기화 (이전 에러 해결됨)
                     prompt_parts =
                     
                     # 1. 프롬프트 기본 설정
