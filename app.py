@@ -68,6 +68,7 @@ def create_pdf(original_summary, ai_explanation):
     pdf.set_font("Arial", size=10, style='B')
     pdf.cell(200, 10, txt="Input Summary:", ln=True)
     pdf.set_font("Arial", size=10)
+    # 한글 깨짐 방지를 위해 영어로 대체되거나 폰트 설정 필요 (여기선 기본 처리)
     pdf.multi_cell(0, 10, txt=original_summary[:1000] + "...") 
     pdf.ln(5)
     
@@ -98,7 +99,7 @@ with col1:
     st.markdown("**1. 메인 수업 자료 (필수 - PDF)**")
     main_file = st.file_uploader("수업 자료", type=['pdf'], key="main")
     
-    # 2. 보충 자료 (확장됨!)
+    # 2. 보충 자료
     st.markdown("**2. 보충 자료 (선택 - 다양한 포맷)**")
     supp_file = st.file_uploader(
         "참고용 PDF, PPT, 동영상, 음성 파일", 
@@ -106,9 +107,9 @@ with col1:
         key="supp"
     )
 
-    # 자료 처리
+    # 자료 처리 변수
     main_text = ""
-    supp_content = None # 텍스트일 수도 있고, Gemini 파일 객체일 수도 있음
+    supp_content = None 
     supp_type = "none"
 
     if main_file:
@@ -129,7 +130,6 @@ with col1:
             st.success("✅ 보충 PPT 텍스트 추출 완료")
             
         elif file_type in ['mp4', 'mp3', 'wav']:
-            # 미디어 파일은 업로드 버튼 누른 후에 처리 (비용/시간 절약)
             supp_type = "media"
             st.info(f"🎞️ {file_type} 파일이 감지되었습니다. '설명 요청' 시 분석됩니다.")
 
@@ -147,6 +147,8 @@ with col2:
                 try:
                     # 모델 준비
                     model = genai.GenerativeModel('gemini-1.5-flash')
+                    
+                    # [수정된 부분] 빈 리스트로 초기화
                     prompt_parts =
                     
                     # 1. 프롬프트 기본 설정
@@ -155,22 +157,22 @@ with col2:
                     
                     # 2. 메인 자료 추가
                     if main_text:
-                        prompt_parts.append(f":\n{main_text[:20000]}")
+                        prompt_parts.append(f"Answer based on this main text:\n{main_text[:30000]}")
                     
                     # 3. 보충 자료 추가
                     if supp_file:
                         st.write("📂 보충 자료 처리 중...")
                         if supp_type == "text":
-                            prompt_parts.append(f"[보충 참고 자료 텍스트]:\n{supp_content[:20000]}")
+                            prompt_parts.append(f"Also consider this supplementary text:\n{supp_content[:20000]}")
                         elif supp_type == "media":
                             # 미디어 업로드 처리
                             mime = "video/mp4" if "mp4" in supp_file.type else "audio/mp3"
                             media_file = upload_to_gemini(supp_file, mime)
                             prompt_parts.append(media_file) # 파일 객체 직접 추가
-                            prompt_parts.append("[위 미디어 파일(영상/음성)을 참고하여 답변하세요]")
+                            prompt_parts.append("Analyze the media file above.")
                     
                     # 4. 사용자 질문 추가
-                    prompt_parts.append(f"[사용자 질문]: {user_question}")
+                    prompt_parts.append(f"User Question: {user_question}")
                     
                     # 5. 답변 생성
                     st.write("✍️ 답변 생성 중...")
