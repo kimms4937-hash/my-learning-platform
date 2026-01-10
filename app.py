@@ -153,12 +153,19 @@ with col2:
 
                     prompt = "\n\n".join(prompt_parts)
 
-                    # 응답 생성 (스트리밍 미지원 대비)
-                    try:
-                        response = model.generate_content(prompt)
-                        answer = response.text
-                    except Exception:
-                        answer = "AI 응답 생성에 실패했습니다."
+                    # 응답 생성 (SDK 구조 차이 대응)
+    try:
+    response = model.generate_content(prompt)
+
+    if hasattr(response, "text") and response.text:
+        answer = response.text
+    else:
+        answer = response.candidates[0].content.parts[0].text
+
+except Exception as e:
+    st.error(e)
+    answer = "AI 응답 생성에 실패했습니다."
+
 
                     st.session_state.ai_response = answer
                     st.markdown("### AI 답변")
