@@ -13,10 +13,13 @@ import time
 st.set_page_config(layout="wide", page_title="나만의 AI 학습 플랫폼 (Multi-Format)")
 
 try:
-    GENAI_API_KEY = st.secrets
-    genai.configure(api_key=GENAI_API_KEY)
-except Exception:
-    st.error("API 키 설정 오류: Streamlit Secrets를 확인해주세요.")
+    GENAI_API_KEY = st.secrets.get("GENAI_API_KEY")
+    if GENAI_API_KEY:
+        genai.configure(api_key=GENAI_API_KEY)
+    else:
+        st.error("API 키가 설정되지 않았습니다. Streamlit Secrets를 확인해주세요.")
+except Exception as e:
+    st.error(f"API 키 설정 중 오류 발생: {e}")
 
 # --------------------------------------------------------------------------
 # 2. 자료 처리 함수들 (PDF, PPT, Media)
@@ -29,8 +32,8 @@ def get_pdf_text(pdf_file):
         pdf_reader = PdfReader(pdf_file)
         for page in pdf_reader.pages:
             text += page.extract_text() or ""
-    except:
-        pass
+    except Exception as e:
+        st.error(f"PDF 읽기 오류: {e}")
     return text
 
 def get_pptx_text(pptx_file):
@@ -42,13 +45,15 @@ def get_pptx_text(pptx_file):
             for shape in slide.shapes:
                 if hasattr(shape, "text"):
                     text += shape.text + "\n"
-    except:
-        pass
+    except Exception as e:
+        st.error(f"PPT 읽기 오류: {e}")
     return text
 
 def upload_to_gemini(file_obj, mime_type):
     """동영상/음성 파일을 Gemini 서버로 업로드"""
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{mime_type.split('/')[-1]}") as tmp:
+    # 임시 파일로 저장
+    suffix = f".{mime_type.split('/')[-1]}"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(file_obj.getvalue())
         tmp_path = tmp.name
     
@@ -63,7 +68,7 @@ def upload_to_gemini(file_obj, mime_type):
     return uploaded_file
 
 def create_pdf(original_summary, ai_explanation):
-    """결과 PDF 생성"""
+    """결과 PDF 생성 (한글 깨짐 방지 처리 없음 - 영문 권장)"""
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
@@ -74,13 +79,18 @@ def create_pdf(original_summary, ai_explanation):
     pdf.set_font("Arial", size=10, style='B')
     pdf.cell(200, 10, txt="Input Summary:", ln=True)
     pdf.set_font("Arial", size=10)
-    pdf.multi_cell(0, 10, txt=original_summary[:1000] + "...") 
+    
+    # 텍스트가 너무 길 경우를 대비해 일부만 요약
+    safe_summary = original_summary[:1000].encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 10, txt=safe_summary + "...") 
     pdf.ln(5)
     
     pdf.set_font("Arial", size=10, style='B')
     pdf.cell(200, 10, txt="AI Explanation:", ln=True)
     pdf.set_font("Arial", size=10)
-    pdf.multi_cell(0, 10, txt=ai_explanation)
+    
+    safe_explanation = ai_explanation.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 10, txt=safe_explanation)
     
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
         pdf.output(tmp_file.name)
@@ -100,11 +110,9 @@ col1, col2 = st.columns([1, 1])
 with col1:
     st.subheader("📂 자료 업로드")
     
-    # 1. 메인 자료
     st.markdown("**1. 메인 수업 자료 (필수 - PDF)**")
     main_file = st.file_uploader("수업 자료", type=['pdf'], key="main")
     
-    # 2. 보충 자료
     st.markdown("**2. 보충 자료 (선택 - 다양한 포맷)**")
     supp_file = st.file_uploader(
         "참고용 PDF, PPT, 동영상, 음성 파일", 
@@ -153,7 +161,7 @@ with col2:
                     # 모델 준비
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     
-                    # [수정 완료] 빈 리스트로 초기화 (이전 에러 해결됨)
+                    # [수정됨] 대괄호를 사용하여 빈 리스트를 올바르게 생성
                     prompt_parts =
                     
                     # 1. 프롬프트 기본 설정
@@ -171,7 +179,7 @@ with col2:
                             prompt_parts.append(f"Also consider this supplementary text:\n{supp_content[:20000]}")
                         elif supp_type == "media":
                             # 미디어 업로드 처리
-                            mime = "video/mp4" if "mp4" in supp_file.type else "audio/mp3"
+                            mime = "video/mp4" if "mp4" in supp_file.name else "audio/mp3"
                             media_file = upload_to_gemini(supp_file, mime)
                             prompt_parts.append(media_file) # 파일 객체 직접 추가
                             prompt_parts.append("Analyze the media file above.")
