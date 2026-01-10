@@ -146,9 +146,9 @@ with col2:
                 try:
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     
-                    # ▼▼▼▼▼▼▼ 여기가 수정된 부분입니다 ▼▼▼▼▼▼▼
-                    prompt_parts = 
-                    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+                    # ▼▼▼▼▼ [수정됨] 대괄호를 정확히 넣었습니다 ▼▼▼▼▼
+                    prompt_parts =
+                    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
                     
                     prompt_parts.append("당신은 친절한 AI 튜터입니다. 다음 자료를 보고 질문에 답하세요.")
                     
