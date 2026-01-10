@@ -1,133 +1,111 @@
-# app.py
 import streamlit as st
 import google.generativeai as genai
-from PyPDF2 import PdfReader
-from pptx import Presentation
-from fpdf import FPDF
-import tempfile
 import os
-import requests
 
-# ======================================================
-# 1. 기본 설정
-# ======================================================
-st.set_page_config(layout="wide", page_title="AI Learning Hub")
+# -----------------------------
+# 기본 설정
+# -----------------------------
+st.set_page_config(
+    page_title="AI Learning Platform",
+    layout="wide"
+)
 
-# Gemini API 키
-GENAI_API_KEY = st.secrets.get("GENAI_API_KEY")
-if not GENAI_API_KEY:
-    st.error("GENAI_API_KEY가 설정되지 않았습니다.")
-    st.stop()
-
-genai.configure(api_key=GENAI_API_KEY)
-
-# ======================================================
-# 2. 한글 폰트 (PDF)
-# ======================================================
-@st.cache_resource
-def get_korean_font():
-    font_path = "NanumGothic-Regular.ttf"
-    if not os.path.exists(font_path):
-        url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
-        r = requests.get(url, timeout=20)
-        r.raise_for_status()
-        with open(font_path, "wb") as f:
-            f.write(r.content)
-    return font_path
-
-FONT_PATH = get_korean_font()
-
-# ======================================================
-# 3. 파일 텍스트 추출
-# ======================================================
-def get_pdf_text(file_obj):
-    text = ""
-    try:
-        reader = PdfReader(file_obj)
-        for page in reader.pages:
-            t = page.extract_text()
-            if t:
-                text += t + "\n"
-    except Exception as e:
-        st.warning(f"PDF 오류: {e}")
-    return text
-
-def get_pptx_text(file_obj):
-    text = ""
-    try:
-        prs = Presentation(file_obj)
-        for slide in prs.slides:
-            for shape in slide.shapes:
-                if hasattr(shape, "text") and shape.text:
-                    text += shape.text + "\n"
-    except Exception as e:
-        st.warning(f"PPT 오류: {e}")
-    return text
-
-# ======================================================
-# 4. PDF 생성
-# ======================================================
-def create_pdf(summary, explanation):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.add_font("Nanum", "", FONT_PATH, uni=True)
-    pdf.set_font("Nanum", size=12)
-
-    pdf.cell(0, 10, "AI 학습 리포트", ln=True, align="C")
-    pdf.ln(8)
-
-    pdf.set_font("Nanum", size=10)
-    pdf.cell(0, 8, "[요약 내용]", ln=True)
-    pdf.multi_cell(0, 7, summary[:2000] if summary else "내용 없음")
-    pdf.ln(4)
-
-    pdf.cell(0, 8, "[AI 설명]", ln=True)
-    pdf.multi_cell(0, 7, explanation if explanation else "응답 없음")
-
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    pdf.output(tmp.name)
-    return tmp.name
-
-# ======================================================
-# 5. UI
-# ======================================================
 st.title("Ultimate AI Learning Hub")
-st.caption("PDF / PPT 기반 AI 학습 도우미")
+st.caption("PDF, PPT, 텍스트 기반 AI 학습 도우미")
 st.markdown("---")
 
-col1, col2 = st.columns(2)
+# -----------------------------
+# Gemini API 설정
+# -----------------------------
+API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# --------------------
-# 자료 업로드
-# --------------------
+if not API_KEY:
+    st.error("GOOGLE_API_KEY 환경 변수가 설정되지 않았습니다.")
+    st.stop()
+
+genai.configure(api_key=API_KEY)
+
+# -----------------------------
+# 세션 상태 초기화
+# -----------------------------
+if "ai_response" not in st.session_state:
+    st.session_state.ai_response = ""
+
+# -----------------------------
+# 레이아웃
+# -----------------------------
+col1, col2 = st.columns([1, 1])
+
+# =============================
+# 좌측: 학습 자료 입력
+# =============================
 with col1:
-    st.subheader("자료 업로드")
-    main_file = st.file_uploader("메인 자료 (PDF)", type=["pdf"])
-    supp_file = st.file_uploader("보충 자료 (PDF / PPT)", type=["pdf", "pptx"])
+    st.subheader("학습 자료 입력")
 
-    main_text = ""
-    supp_text = ""
+    main_text = st.text_area(
+        "메인 학습 자료",
+        height=250,
+        placeholder="여기에 학습할 내용을 붙여넣으세요"
+    )
 
-    if main_file:
-        main_text = get_pdf_text(main_file)
-        st.success("메인 자료 로드 완료")
+    supp_text = st.text_area(
+        "보충 자료 (선택)",
+        height=200,
+        placeholder="추가 참고 자료가 있다면 입력하세요"
+    )
 
-    if supp_file:
-        if supp_file.name.endswith(".pdf"):
-            supp_text = get_pdf_text(supp_file)
-        else:
-            supp_text = get_pptx_text(supp_file)
-        st.success("보충 자료 로드 완료")
-
-# --------------------
-# AI 질문
-# --------------------
+# =============================
+# 우측: AI 질문
+# =============================
 with col2:
     st.subheader("AI 튜터")
-    user_question = st.text_area("질문을 입력하세요", height=120)
+
+    user_question = st.text_area(
+        "질문을 입력하세요",
+        height=120,
+        placeholder="이 개념을 쉽게 설명해줘"
+    )
 
     if st.button("설명 요청", type="primary"):
         if not user_question:
             st.warning("질문을 입력하세요.")
         else:
             with st.spinner("AI가 분석 중입니다..."):
+                try:
+                    # Gemini 모델 (안정)
+                    model = genai.GenerativeModel("gemini-pro")
+
+                    prompt_parts = []
+                    prompt_parts.append("당신은 친절하고 이해하기 쉽게 설명하는 AI 튜터입니다.")
+
+                    if main_text.strip():
+                        prompt_parts.append(
+                            "다음은 메인 학습 자료입니다:\n" + main_text[:30000]
+                        )
+
+                    if supp_text.strip():
+                        prompt_parts.append(
+                            "다음은 보충 자료입니다:\n" + supp_text[:20000]
+                        )
+
+                    prompt_parts.append("질문:\n" + user_question)
+
+                    prompt = "\n\n".join(prompt_parts)
+
+                    response = model.generate_content(prompt)
+
+                    # 응답 구조 호환 처리
+                    if hasattr(response, "text") and response.text:
+                        answer = response.text
+                    else:
+                        answer = response.candidates[0].content.parts[0].text
+
+                    st.session_state.ai_response = answer
+
+                except Exception as e:
+                    st.error(f"에러 발생: {e}")
+                    st.session_state.ai_response = ""
+
+    if st.session_state.ai_response:
+        st.markdown("### AI 답변")
+        st.write(st.session_state.ai_response)
