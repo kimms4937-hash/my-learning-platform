@@ -13,7 +13,7 @@ import requests
 # ======================================================
 st.set_page_config(layout="wide", page_title="AI Learning Hub")
 
-# Gemini API 키 설정 (Streamlit Secrets)
+# Gemini API 키
 GENAI_API_KEY = st.secrets.get("GENAI_API_KEY")
 if not GENAI_API_KEY:
     st.error("GENAI_API_KEY가 설정되지 않았습니다.")
@@ -22,7 +22,7 @@ if not GENAI_API_KEY:
 genai.configure(api_key=GENAI_API_KEY)
 
 # ======================================================
-# 2. 한글 폰트 (PDF용)
+# 2. 한글 폰트 (PDF)
 # ======================================================
 @st.cache_resource
 def get_korean_font():
@@ -38,7 +38,7 @@ def get_korean_font():
 FONT_PATH = get_korean_font()
 
 # ======================================================
-# 3. 파일 텍스트 추출 함수
+# 3. 파일 텍스트 추출
 # ======================================================
 def get_pdf_text(file_obj):
     text = ""
@@ -49,7 +49,7 @@ def get_pdf_text(file_obj):
             if t:
                 text += t + "\n"
     except Exception as e:
-        st.warning(f"PDF 읽기 오류: {e}")
+        st.warning(f"PDF 오류: {e}")
     return text
 
 def get_pptx_text(file_obj):
@@ -61,7 +61,7 @@ def get_pptx_text(file_obj):
                 if hasattr(shape, "text") and shape.text:
                     text += shape.text + "\n"
     except Exception as e:
-        st.warning(f"PPT 읽기 오류: {e}")
+        st.warning(f"PPT 오류: {e}")
     return text
 
 # ======================================================
@@ -131,56 +131,3 @@ with col2:
             st.warning("질문을 입력하세요.")
         else:
             with st.spinner("AI가 분석 중입니다..."):
-                try:
-                    # ★ 안정 모델 사용 (중요)
-                    model = genai.GenerativeModel("gemini-pro")
-
-                    # 프롬프트 구성 (문법 안전)
-                    prompt_parts = []
-                    prompt_parts.append("당신은 친절한 AI 튜터입니다.")
-
-                    if main_text:
-                        prompt_parts.append(
-                            "다음은 메인 학습 자료입니다:\n" + main_text[:30000]
-                        )
-
-                    if supp_text:
-                        prompt_parts.append(
-                            "다음은 보충 자료입니다:\n" + supp_text[:20000]
-                        )
-
-                    prompt_parts.append("질문:\n" + user_question)
-
-                    prompt = "\n\n".join(prompt_parts)
-
-                    # 응답 생성 (SDK 구조 차이 대응)
-    try:
-    response = model.generate_content(prompt)
-
-    if hasattr(response, "text") and response.text:
-        answer = response.text
-    else:
-        answer = response.candidates[0].content.parts[0].text
-
-except Exception as e:
-    st.error(e)
-    answer = "AI 응답 생성에 실패했습니다."
-
-
-                    st.session_state.ai_response = answer
-                    st.markdown("### AI 답변")
-                    st.write(answer)
-
-                except Exception as e:
-                    st.error(f"에러 발생: {e}")
-
-# ======================================================
-# 6. PDF 저장
-# ======================================================
-if "ai_response" in st.session_state:
-    st.markdown("---")
-    if st.button("PDF로 저장"):
-        pdf_path = create_pdf(main_text, st.session_state.ai_response)
-        with open(pdf_path, "rb") as f:
-            st.download_button("PDF 다운로드", f, file_name="study_report.pdf")
-        os.remove(pdf_path)
