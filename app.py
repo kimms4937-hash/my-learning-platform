@@ -200,7 +200,8 @@ with col2:
                     prompt = "\n\n".join(prompt_parts)
 
                     # 모델 호출 (SDK 버전에 따라 약간의 차이가 있을 수 있음)
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    # 사용 가능한 안정 모델로 변경 (v1beta)
+model = genai.GenerativeModel('models/gemini-1.5-pro')
                     response = model.generate_content(prompt)
 
                     # SDK 반환 형태에 따라 조정 (response.text가 일반적)
