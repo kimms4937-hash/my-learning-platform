@@ -1,8 +1,7 @@
 streamlit 
-pandas 
-numpy 
 google-generativeai 
-fpdf2 
 PyPDF2 
-python-dotenv 
-python-pptx
+python-pptx 
+fpdf2 
+requests 
+python-dotenv
