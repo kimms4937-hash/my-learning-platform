@@ -1,7 +1,4 @@
-streamlit 
-google-generativeai 
-PyPDF2 
-python-pptx 
-fpdf2 
-requests 
-python-dotenv
+streamlit
+openai
+PyPDF2
+python-pptx
