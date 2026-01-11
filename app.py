@@ -1,126 +1,88 @@
 import streamlit as st
+import requests
 from PyPDF2 import PdfReader
 from pptx import Presentation
-import os
-from openai import OpenAI
 
-# --------------------------------------------------
+# -----------------------------
 # 기본 설정
-# --------------------------------------------------
-st.set_page_config(page_title="나만의 AI 학습 사이트", layout="wide")
-st.title("📚 나만의 영구적인 학습 사이트")
-st.markdown("---")
+# -----------------------------
+st.set_page_config(page_title="무료 학습 정리 머신", layout="wide")
+st.title("📘 무료 학습 정리 머신")
+st.markdown("수업 자료를 올리면 핵심만 정리해준다.")
 
-# --------------------------------------------------
-# OpenAI API 키 로딩
-# --------------------------------------------------
-api_key = None
+# -----------------------------
+# Hugging Face API
+# -----------------------------
+HF_API_KEY = st.secrets["HF_API_KEY"]
+API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-large"
+HEADERS = {"Authorization": f"Bearer {HF_API_KEY}"}
 
-if "OPENAI_API_KEY" in st.secrets:
-    api_key = st.secrets["OPENAI_API_KEY"]
-elif os.getenv("OPENAI_API_KEY"):
-    api_key = os.getenv("OPENAI_API_KEY")
-
-if api_key is None:
-    st.error("❌ OPENAI_API_KEY가 설정되지 않았습니다.")
-    st.stop()
-
-client = OpenAI(api_key=api_key)
-
-# --------------------------------------------------
-# 파일 텍스트 추출 함수
-# --------------------------------------------------
+# -----------------------------
+# 파일 처리
+# -----------------------------
 def get_pdf_text(file):
-    text = ""
     reader = PdfReader(file)
-    for page in reader.pages:
-        text += page.extract_text() or ""
-    return text
+    return "".join(page.extract_text() or "" for page in reader.pages)
 
 def get_pptx_text(file):
-    text = ""
     prs = Presentation(file)
+    text = ""
     for slide in prs.slides:
         for shape in slide.shapes:
             if hasattr(shape, "text"):
                 text += shape.text + "\n"
     return text
 
-# --------------------------------------------------
+def query(prompt):
+    response = requests.post(
+        API_URL,
+        headers=HEADERS,
+        json={"inputs": prompt}
+    )
+    return response.json()
+
+# -----------------------------
 # UI
-# --------------------------------------------------
+# -----------------------------
 col1, col2 = st.columns(2)
 
 with col1:
     st.header("1. 자료 업로드")
-
-    main_file = st.file_uploader(
-        "메인 수업 자료 (PDF)",
-        type=["pdf"]
-    )
-
-    supp_file = st.file_uploader(
-        "보충 자료 (PDF / PPT)",
-        type=["pdf", "pptx"]
-    )
+    main_file = st.file_uploader("PDF 또는 PPT", type=["pdf", "pptx"])
 
 with col2:
-    st.header("2. AI 튜터")
-
-    question = st.text_area(
-        "질문 또는 요청사항",
-        "이 내용을 바탕으로 핵심 개념을 이해하기 쉽게 설명해줘."
+    st.header("2. 정리 요청")
+    style = st.selectbox(
+        "정리 방식",
+        ["핵심 개념 요약", "시험 대비 정리", "목차형 정리"]
     )
+    btn = st.button("🧠 정리 시작")
 
-    generate_btn = st.button("🚀 설명 요청하기")
-
-# --------------------------------------------------
-# AI 응답 생성
-# --------------------------------------------------
-if generate_btn:
-    if not main_file:
-        st.warning("메인 자료를 먼저 업로드해주세요.")
-        st.stop()
-
-    with st.spinner("AI가 분석 중입니다..."):
-        main_text = get_pdf_text(main_file)
-
-        supp_text = ""
-        if supp_file:
-            if supp_file.name.endswith(".pdf"):
-                supp_text = get_pdf_text(supp_file)
-            elif supp_file.name.endswith(".pptx"):
-                supp_text = get_pptx_text(supp_file)
+# -----------------------------
+# 실행
+# -----------------------------
+if btn and main_file:
+    with st.spinner("정리 중..."):
+        if main_file.name.endswith(".pdf"):
+            text = get_pdf_text(main_file)
+        else:
+            text = get_pptx_text(main_file)
 
         prompt = f"""
-아래는 학습 자료이다.
+다음 학습 자료를 읽고 "{style}" 형식으로 정리하라.
 
-[메인 자료]
-{main_text[:6000]}
+- 불필요한 말 제거
+- 번호와 소제목 사용
+- 노트처럼 간결하게 작성
 
-[보충 자료]
-{supp_text[:4000]}
-
-[요청]
-{question}
-
-대학생 수준에서 이해하기 쉽게,
-구조적으로 정리해서 설명하라.
+[학습 자료]
+{text[:4000]}
 """
 
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "너는 친절한 AI 튜터이다."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.4
-            )
+        result = query(prompt)
 
-            answer = response.choices[0].message.content
-            st.success("분석 완료!")
-            st.write(answer)
-
-        except Exception as e:
-            st.error(f"에러 발생: {e}")
+        if isinstance(result, dict) and "error" in result:
+            st.error(result["error"])
+        else:
+            st.success("정리 완료")
+            st.write(result[0]["generated_text"])
