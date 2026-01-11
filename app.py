@@ -128,8 +128,8 @@ with col2:
                     # 모델 설정
                     model = genai.GenerativeModel('gemini-1.5-flash')
                     
-                    # [중요] 여기가 계속 에러나던 부분입니다. 확실하게 수정했습니다.
-                    prompt_parts = 
+                    # [수정완료] 빈 리스트()를 확실하게 넣었습니다.
+                    prompt_parts =
                     
                     # 1. 메인 자료 텍스트 추가
                     main_text = get_pdf_text(main_file)
@@ -168,6 +168,7 @@ with col2:
         st.write(st.session_state['result'])
         
         # PDF 다운로드 버튼
-        pdf_file = create_pdf_report(st.session_state['main_text'], st.session_state['result'])
-        with open(pdf_file, "rb") as f:
-            st.download_button("📄 PDF로 저장하기", f, "study_note.pdf")
+        if 'main_text' in st.session_state:
+            pdf_file = create_pdf_report(st.session_state['main_text'], st.session_state['result'])
+            with open(pdf_file, "rb") as f:
+                st.download_button("📄 PDF로 저장하기", f, "study_note.pdf")
